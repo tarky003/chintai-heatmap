@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>賃貸需要ヒートマップ検索</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    max-width: 560px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #222;
+  }
+  h1 { font-size: 20px; margin-bottom: 8px; }
+  p.desc { color: #555; font-size: 14px; line-height: 1.6; }
+  .box {
+    display: flex;
+    gap: 8px;
+    margin-top: 24px;
+  }
+  input[type=text] {
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  button {
+    padding: 12px 20px;
+    font-size: 16px;
+    background: #ff6600;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #e65c00; }
+  #result {
+    margin-top: 20px;
+    padding: 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    display: none;
+  }
+  #result.ok { background: #e8f5e9; color: #256029; display: block; }
+  #result.ng { background: #fdecea; color: #b3261e; display: block; }
+  #result a { color: inherit; font-weight: bold; }
+  .note { margin-top: 32px; font-size: 12px; color: #888; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <h1>賃貸需要ヒートマップ検索</h1>
+  <p class="desc">
+    住所を入力すると、「見える賃貸経営」(LIFULL HOME'S) の市区町村別・賃貸需要ヒートマップページを開きます。<br>
+    ※ toushi.homes.co.jp に事前にログイン済みであることが必要です。
+  </p>
+
+  <div class="box">
+    <input type="text" id="address" placeholder="例: 埼玉県富士見市関沢3丁目28" autofocus>
+    <button id="searchBtn">検索</button>
+  </div>
+
+  <div id="result"></div>
+
+  <p class="note">
+    ヒートマップは市区町村単位のデータです。番地レベルのピン表示はされません。<br>
+    表示されない場合は toushi.homes.co.jp に先にログインしてから再度お試しください。
+  </p>
+
+<script>
+let cityData = null;
+
+async function loadData() {
+  const res = await fetch("citymap.json");
+  cityData = await res.json();
+}
+
+function resolve(address) {
+  address = address.replace(/\s+/g, "");
+  const { pref_slug, cities } = cityData;
+
+  const prefName = Object.keys(pref_slug).find(p => address.startsWith(p));
+  if (!prefName) return null;
+
+  const remainder = address.slice(prefName.length);
+  const cityNames = Object.keys(cities[prefName] || {}).sort((a, b) => b.length - a.length);
+  const cityName = cityNames.find(c => remainder.startsWith(c));
+  if (!cityName) return null;
+
+  const code = cities[prefName][cityName];
+  const slug = pref_slug[prefName];
+  return {
+    prefName,
+    cityName,
+    url: `https://toushi.homes.co.jp/owner/${slug}/city${code}/`
+  };
+}
+
+async function onSearch() {
+  const address = document.getElementById("address").value.trim();
+  const resultEl = document.getElementById("result");
+
+  if (!address) return;
+  if (!cityData) await loadData();
+
+  const result = resolve(address);
+  if (!result) {
+    resultEl.className = "ng";
+    resultEl.innerHTML = `住所から市区町村を特定できませんでした。都道府県名から入力してください（例：埼玉県〜）。`;
+    return;
+  }
+
+  resultEl.className = "ok";
+  resultEl.innerHTML = `${result.prefName}${result.cityName} のヒートマップを開きます → <a href="${result.url}" target="_blank" rel="noopener">${result.url}</a>`;
+  window.open(result.url, "_blank");
+}
+
+document.getElementById("searchBtn").addEventListener("click", onSearch);
+document.getElementById("address").addEventListener("keydown", e => {
+  if (e.key === "Enter") onSearch();
+});
+
+loadData();
+</script>
+</body>
+</html>
