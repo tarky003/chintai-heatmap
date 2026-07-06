@@ -64,19 +64,32 @@
   <div id="result"></div>
 
   <p class="note">
-    ヒートマップは市区町村単位のデータです。番地レベルのピン表示はされません。<br>
+    ヒートマップの色分けデータは市区町村単位ですが、地図の表示位置は町丁目レベルの座標に自動で合わせます（番地までの厳密なピンは付きません）。<br>
     表示されない場合は toushi.homes.co.jp に先にログインしてから再度お試しください。
   </p>
 
 <script>
 let cityData = null;
+const townCache = {};
 
 async function loadData() {
   const res = await fetch("citymap.json");
   cityData = await res.json();
 }
 
-function resolve(address) {
+async function loadTowns(slug) {
+  if (townCache[slug]) return townCache[slug];
+  try {
+    const res = await fetch(`towns/${slug}.json`);
+    const data = await res.json();
+    townCache[slug] = data;
+    return data;
+  } catch (e) {
+    return {};
+  }
+}
+
+async function resolve(address) {
   address = address.replace(/\s+/g, "");
   const { pref_slug, cities } = cityData;
 
@@ -90,11 +103,26 @@ function resolve(address) {
 
   const code = cities[prefName][cityName];
   const slug = pref_slug[prefName];
-  return {
-    prefName,
-    cityName,
-    url: `https://toushi.homes.co.jp/owner/${slug}/city${code}/`
-  };
+  const baseUrl = `https://toushi.homes.co.jp/owner/${slug}/city${code}/`;
+  const result = { prefName, cityName, url: baseUrl, precise: false };
+
+  const townRemainder = remainder.slice(cityName.length);
+  const townsInCity = (await loadTowns(slug))[cityName];
+  if (townsInCity) {
+    const townPairs = Object.keys(townsInCity)
+      .map(t => [t.replace(/^(大字|字)/, ""), t])
+      .sort((a, b) => b[0].length - a[0].length);
+    const match = townPairs.find(([norm]) => norm && townRemainder.startsWith(norm));
+    if (match) {
+      const [, townName] = match;
+      const [lat, lng] = townsInCity[townName];
+      result.url = `${baseUrl}?lat=${lat}&lng=${lng}`;
+      result.townName = townName;
+      result.precise = true;
+    }
+  }
+
+  return result;
 }
 
 async function onSearch() {
@@ -104,15 +132,16 @@ async function onSearch() {
   if (!address) return;
   if (!cityData) await loadData();
 
-  const result = resolve(address);
+  const result = await resolve(address);
   if (!result) {
     resultEl.className = "ng";
     resultEl.innerHTML = `住所から市区町村を特定できませんでした。都道府県名から入力してください（例：埼玉県〜）。`;
     return;
   }
 
+  const label = result.prefName + result.cityName + (result.precise ? result.townName : "");
   resultEl.className = "ok";
-  resultEl.innerHTML = `${result.prefName}${result.cityName} のヒートマップを開きます → <a href="${result.url}" target="_blank" rel="noopener">${result.url}</a>`;
+  resultEl.innerHTML = `${label} のヒートマップを開きます → <a href="${result.url}" target="_blank" rel="noopener">${result.url}</a>`;
   window.open(result.url, "_blank");
 }
 
