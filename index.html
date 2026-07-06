@@ -46,13 +46,26 @@
   #result.ok { background: #e8f5e9; color: #256029; display: block; }
   #result.ng { background: #fdecea; color: #b3261e; display: block; }
   #result a { color: inherit; font-weight: bold; }
+  .linklist { list-style: none; padding: 0; margin: 10px 0 0; }
+  .linklist li { margin-top: 6px; }
+  .linklist a {
+    display: block;
+    padding: 10px 12px;
+    background: white;
+    border: 1px solid #cde5cf;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #256029;
+    font-weight: bold;
+  }
+  .linklist a:hover { background: #f1f8f2; }
   .note { margin-top: 32px; font-size: 12px; color: #888; line-height: 1.6; }
 </style>
 </head>
 <body>
   <h1>賃貸需要ヒートマップ検索</h1>
   <p class="desc">
-    住所を入力すると、「見える賃貸経営」(LIFULL HOME'S) の市区町村別・賃貸需要ヒートマップページを開きます。<br>
+    住所を入力すると、「見える賃貸経営」(LIFULL HOME'S) の市区町村別ページ（賃貸需要・物件調査・価格動向・街の動向）を開きます。<br>
     ※ toushi.homes.co.jp に事前にログイン済みであることが必要です。
   </p>
 
@@ -65,6 +78,7 @@
 
   <p class="note">
     ヒートマップの色分けデータは市区町村単位ですが、地図の表示位置は町丁目レベルの座標に自動で合わせます（番地までの厳密なピンは付きません）。<br>
+    「賃貸需要」ページのみ自動で新しいタブが開きます。他の3ページはリンクをクリックしてご覧ください。<br>
     表示されない場合は toushi.homes.co.jp に先にログインしてから再度お試しください。
   </p>
 
@@ -103,8 +117,9 @@ async function resolve(address) {
 
   const code = cities[prefName][cityName];
   const slug = pref_slug[prefName];
-  const baseUrl = `https://toushi.homes.co.jp/owner/${slug}/city${code}/`;
-  const result = { prefName, cityName, url: baseUrl, precise: false };
+  const cityPath = `/owner/${slug}/city${code}/`;
+  const baseUrl = `https://toushi.homes.co.jp${cityPath}`;
+  const result = { prefName, cityName, url: baseUrl, cityPath, precise: false };
 
   const townRemainder = remainder.slice(cityName.length);
   const townsInCity = (await loadTowns(slug))[cityName];
@@ -140,8 +155,19 @@ async function onSearch() {
   }
 
   const label = result.prefName + result.cityName + (result.precise ? result.townName : "");
+  const cityBase = `https://toushi.homes.co.jp${result.cityPath}`;
+  const pages = [
+    ["賃貸需要（空室率・利回り・ヒートマップ）", result.url],
+    ["物件調査（掲載物件数・設備条件など）", `${cityBase}bukken/`],
+    ["価格動向（地価公示・相場）", `${cityBase}kakaku/`],
+    ["街の動向（人口・世帯数など）", `${cityBase}machi/`],
+  ];
+
   resultEl.className = "ok";
-  resultEl.innerHTML = `${label} のヒートマップを開きます → <a href="${result.url}" target="_blank" rel="noopener">${result.url}</a>`;
+  resultEl.innerHTML = `${label} のページを開きます` +
+    `<ul class="linklist">` +
+    pages.map(([name, url]) => `<li><a href="${url}" target="_blank" rel="noopener">${name}</a></li>`).join("") +
+    `</ul>`;
   window.open(result.url, "_blank");
 }
 
